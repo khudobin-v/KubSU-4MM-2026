@@ -1,6 +1,6 @@
 {
-  "name": "Hello Extensions",
-  "description": "Base Level Extension",
+  "name": "Internet Summarizer",
+  "description": "A Chrome extension that summarizes the content of web pages using AI.",
   "version": "1.0",
   "manifest_version": 3,
   "action": {

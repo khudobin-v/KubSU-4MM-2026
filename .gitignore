@@ -1,2 +1,2 @@
-docker/
-hello.txt
+.venv/
+__pycache__/

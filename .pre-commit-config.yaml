@@ -1,7 +1,30 @@
-repos: 
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: end-of-file-fixer
+        exclude: ^(browser_extension/|\.gitignore$)
+      - id: trailing-whitespace
+        exclude: ^(browser_extension/|\.gitignore$)
+
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.15.4
     hooks:
       - id: ruff-check
-        args: [ --fix ]
+        args: [--fix]
       - id: ruff-format
+
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v1.19.1
+    hooks:
+      - id: mypy
+        args: [--config-file=pyproject.toml]
+        additional_dependencies: [fastapi==0.134.0]
+
+  - repo: local
+    hooks:
+      - id: pytest
+        name: pytest
+        entry: .venv/bin/pytest
+        language: system
+        pass_filenames: false

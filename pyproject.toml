@@ -7,7 +7,7 @@ select = ["E", "F", "I", "B", "UP"]
 
 [tool.mypy]
 python_version = "3.11"
-files = ["main.py", "tests"]
+files = ["main.py", "app", "tests"]
 check_untyped_defs = true
 disallow_untyped_defs = true
 warn_unused_ignores = true

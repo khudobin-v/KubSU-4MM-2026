@@ -19,7 +19,7 @@ repos:
     hooks:
       - id: mypy
         args: [--config-file=pyproject.toml]
-        additional_dependencies: [fastapi==0.134.0]
+        additional_dependencies: [fastapi==0.134.0, pytest==8.3.5]
 
   - repo: local
     hooks:

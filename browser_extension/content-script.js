@@ -1,6 +1,10 @@
 const LESS_LINES_THRESHOLD = 30;
+const VIEW_SEND_DELAY_MS = 1500;
 
-// Удаление лишних пробелов, нормализация юникода и удаление нулевых символов
+let lastSentUrl = "";
+let pendingSendTimeoutId = null;
+let lastKnownHref = location.href;
+
 const normalizeText = (text) => {
   return text
     .normalize("NFKC")
@@ -11,58 +15,59 @@ const normalizeText = (text) => {
     .trim();
 };
 
-// Удаление строк короче 30 символов и дубликатов
 const removeDuplicateLines = (text) => {
   const seen = new Set();
   return text
     .split("\n")
-    .map((l) => l.trim())
+    .map((line) => line.trim())
     .filter((line) => {
-      if (line.length < LESS_LINES_THRESHOLD) return false;
-      if (seen.has(line)) return false;
+      if (line.length < LESS_LINES_THRESHOLD) {
+        return false;
+      }
+      if (seen.has(line)) {
+        return false;
+      }
       seen.add(line);
       return true;
     })
     .join("\n");
 };
 
-// Получение видимого текста элемента, игнорируя скрытые блоки
-const getVisibleText = (el) => {
-  const style = window.getComputedStyle(el);
+const getVisibleText = (element) => {
+  const style = window.getComputedStyle(element);
   if (
     style.display === "none" ||
     style.visibility === "hidden" ||
-    el.offsetHeight === 0
+    element.offsetHeight === 0
   ) {
     return "";
   }
-  return el.innerText.trim();
+  return element.innerText.trim();
 };
 
-// Оценка элемента по количеству текста, ссылок, кнопок и абзацев, а также по классу и id
-const scoreElement = (el) => {
-  const text = getVisibleText(el);
-  if (text.length < 300) return 0;
+const scoreElement = (element) => {
+  const text = getVisibleText(element);
+  if (text.length < 300) {
+    return 0;
+  }
 
-  const links = el.querySelectorAll("a").length;
-  const buttons = el.querySelectorAll("button").length;
-  const paragraphs = el.querySelectorAll("p").length;
+  const links = element.querySelectorAll("a").length;
+  const buttons = element.querySelectorAll("button").length;
+  const paragraphs = element.querySelectorAll("p").length;
 
   let score = text.length;
-
   score -= links * 60;
   score -= buttons * 40;
   score += paragraphs * 100;
 
   const badPatterns = /nav|menu|footer|header|sidebar|comment|ads?|promo/i;
-  if (badPatterns.test(el.className) || badPatterns.test(el.id)) {
+  if (badPatterns.test(element.className) || badPatterns.test(element.id)) {
     score *= 0.2;
   }
 
   return score;
 };
 
-// Извлечение основного блока наилучшим образом
 const extractMainBlock = () => {
   const semantic =
     document.querySelector("article") ||
@@ -71,47 +76,100 @@ const extractMainBlock = () => {
 
   if (semantic) {
     const text = getVisibleText(semantic);
-    if (text.length > 500) return semantic;
-  }
-
-  const candidates = [...document.querySelectorAll("div, section, article")];
-
-  let bestEl = null;
-  let bestScore = 0;
-
-  for (const el of candidates) {
-    const score = scoreElement(el);
-    if (score > bestScore) {
-      bestScore = score;
-      bestEl = el;
+    if (text.length > 500) {
+      return semantic;
     }
   }
 
-  return bestEl;
+  const candidates = [...document.querySelectorAll("div, section, article")];
+  let bestElement = null;
+  let bestScore = 0;
+
+  for (const element of candidates) {
+    const score = scoreElement(element);
+    if (score > bestScore) {
+      bestScore = score;
+      bestElement = element;
+    }
+  }
+
+  return bestElement;
 };
 
-// Парсинг текста страницы, нормализация и удаление дубликатов
 const parseContentText = () => {
   const block = extractMainBlock();
-  if (!block) return "";
+  if (!block) {
+    return "";
+  }
 
   let text = getVisibleText(block);
   text = normalizeText(text);
   text = removeDuplicateLines(text);
-
   return text;
 };
 
-window.addEventListener("load", () => {
-  setTimeout(() => {
-    const payload = {
-      type: "view",
-      url: location.href,
-      title: normalizeText(document.title || ""),
-      lang: document.documentElement?.lang || "",
-      text: parseContentText(),
-    };
+function sendCurrentView() {
+  if (lastSentUrl === location.href) {
+    return;
+  }
 
-    chrome.runtime.sendMessage(payload);
-  }, 1500);
+  const payload = {
+    type: "view",
+    url: location.href,
+    title: normalizeText(document.title || ""),
+    lang: document.documentElement?.lang || "",
+    text: parseContentText(),
+  };
+
+  chrome.runtime.sendMessage(payload);
+  lastSentUrl = location.href;
+}
+
+function scheduleViewSend() {
+  if (pendingSendTimeoutId) {
+    clearTimeout(pendingSendTimeoutId);
+  }
+
+  pendingSendTimeoutId = setTimeout(() => {
+    pendingSendTimeoutId = null;
+    sendCurrentView();
+  }, VIEW_SEND_DELAY_MS);
+}
+
+function handleLocationChange() {
+  if (location.href === lastKnownHref) {
+    return;
+  }
+
+  lastKnownHref = location.href;
+  scheduleViewSend();
+}
+
+const originalPushState = history.pushState;
+history.pushState = function pushState(...args) {
+  originalPushState.apply(this, args);
+  handleLocationChange();
+};
+
+const originalReplaceState = history.replaceState;
+history.replaceState = function replaceState(...args) {
+  originalReplaceState.apply(this, args);
+  handleLocationChange();
+};
+
+window.addEventListener("popstate", handleLocationChange);
+window.addEventListener("load", scheduleViewSend);
+document.addEventListener("visibilitychange", () => {
+  if (!document.hidden) {
+    scheduleViewSend();
+  }
+});
+
+const observer = new MutationObserver(() => {
+  handleLocationChange();
+});
+
+observer.observe(document.documentElement, {
+  childList: true,
+  subtree: true,
 });

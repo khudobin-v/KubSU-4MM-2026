@@ -1,0 +1,18 @@
+services:
+  ollama:
+    image: ollama/ollama:latest
+    container_name: ollama
+    restart: unless-stopped
+    environment:
+      OLLAMA_MODEL: gemma3:4b
+    ports:
+      - "11434:11434"
+    volumes:
+      - ./ollama:/root/.ollama
+    entrypoint: ["/bin/sh", "-c"]
+    command: >
+      ollama serve &
+      pid=$$! &&
+      sleep 5 &&
+      ollama pull "$$OLLAMA_MODEL" &&
+      wait $$pid
